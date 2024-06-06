@@ -1,0 +1,10 @@
+# Python files 
+venv
+build
+tdqual.egg-info
+
+# Notebook files 
+*.ipynb_checkpoints
+
+# Generated Plots
+plots

@@ -1,0 +1,11 @@
+[project]
+name = "tdqual"
+version = "0.0.1"
+dependencies = [
+    "numpy", "matplotlib", "scipy"
+]
+[tool.setuptools.packages.find]
+# All the following settings are optional:
+where = ["."]  # ["."] by default
+include = ["tdqual*"]  # ["*"] by default
+namespaces = false  # true by default
