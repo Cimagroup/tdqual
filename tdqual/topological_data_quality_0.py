@@ -5,46 +5,79 @@ import matplotlib as mpl
 import scipy.spatial.distance as dist
 from scipy.sparse.csgraph import minimum_spanning_tree
 
+def compute_Mf_0(X, Z, indices_X):
+    filtration_list_X, pairs_arr_X = mst_edge_filtration(X) # MST(X)
+    filtration_list_Z, pairs_arr_Z = mst_edge_filtration(Z) # MST(Z)
+    TMT_X_pairs = compute_tmt_pairs(filtration_list_X, pairs_arr_X)
+    TMT_Z_pairs = compute_tmt_pairs(filtration_list_Z, pairs_arr_Z)
+    indices_X_Z = np.max(TMT_Z_pairs, axis=1)<X.shape[0]
+    TMT_X_Z_pairs = TMT_Z_pairs[indices_X_Z]
+    indices_X_Z = np.nonzero(indices_X_Z)[0]
+    FX = get_inclusion_matrix(TMT_X_pairs, TMT_X_Z_pairs) # Associated matrix
+    matchingX = get_inclusion_matrix_pivots(FX, Z.shape[0]) # Matching in TMT_X_Z
+    matching =[indices_X_Z[i] for i in matchingX] # Matching in all TMT_Z
+    return filtration_list_X, filtration_list_Z, matching
+
 def read_csr_matrix(cs_matrix):
     """Function to read output from minimum_spanning_tree and prepare it as a list of 
     filtration values (in order) together with an array with the corresponding pairs.
     """ 
     filtration_list = []
-    pairs = []
+    edges = []
     entry_idx = 0
     for i, cummul_num_entries in enumerate(cs_matrix.indptr[1:]):
         while entry_idx < cummul_num_entries:
-            pairs.append((i, cs_matrix.indices[entry_idx]))
+            edges.append((i, cs_matrix.indices[entry_idx]))
             filtration_list.append(cs_matrix.data[entry_idx])
             entry_idx+=1
     # Sort filtration values and pairs
-    pairs_arr = np.array(pairs)
+    edges_arr = np.array(edges)
     np.argsort(filtration_list)
     sort_idx = np.argsort(filtration_list)
     filtration_list = np.array(filtration_list)[sort_idx].tolist()
-    pairs_arr = pairs_arr[sort_idx]
-    return filtration_list, pairs_arr
+    edges_arr = edges_arr[sort_idx]
+    return filtration_list, edges_arr
 
-def filtration_pairs(points):
-    """Returns the persistent homology pairs and filtration values for 
-    a given point sample. This is like a 0-dimensional persistent homology 
-    wrapper for the minimum_spanning_tree function.
+def mst_edge_filtration(points):
+    """Returns the edges and filtration values for the Euclidean minimum spanning tree
+    of a given point sample. 
+    This is a wrapper for the scipy minimum_spanning_tree function.
     """ 
     mst = minimum_spanning_tree(dist.squareform(dist.pdist(points)))
     # We now read the compressed sparse row matrix
-    filtration_list, pairs_arr = read_csr_matrix(mst)
+    return read_csr_matrix(mst)
+
+def compute_tmt_pairs(filtration_list, edges_arr, tolerance=10e-8):
     # Get proper merge tree pairs 
-    labels = np.array(list(range(points.shape[0])))
-    correct_pairs_list = []
-    for pair in pairs_arr:
-        min_label = np.min(labels[pair])
-        max_label = np.max(labels[pair])
-        correct_pairs_list.append([min_label, max_label])
-        assert min_label < max_label
-        labels[labels==max_label]=min_label
-    # end updating correct pairs
-    pairs_arr = np.array(correct_pairs_list)
-    return filtration_list, pairs_arr
+    E_b = []
+    C = np.array(list(range(edges_arr.shape[0]+1)))
+    tmt_pairs_list = []
+    for i, (b, edge) in enumerate(zip(filtration_list, edges_arr)):
+        E_b.append(edge)
+        # If the next filtration value is very close, we continue addin edges to E_b
+        if i < len(filtration_list)-1:
+            if np.abs(b - filtration_list[i+1]) < tolerance:
+                continue
+        
+        # We iterate over E_b, adding triplets to tmt_pairs_list following steps (i)-(v) from the article
+        while(len(E_b)>0):
+            # (i) we take the edge [i,j] from E_b such that min{C[i],C[j]} is smallest
+            E_b_C_min = [np.min(C[edge]) for edge in E_b]
+            idx = np.argmin(E_b_C_min)
+            edge = E_b[idx]
+            # (ii) 
+            M, m = np.max(C[edge]), np.min(C[edge])
+            assert m < M
+            # (iii) 
+            tmt_pairs_list.append([M,m])
+            # (iv)
+            C[C==M]=m
+            # (v)
+            del(E_b[idx])
+        # end when E_b is empty
+    # end computing tmt
+    tmt_pairs_arr = np.array(tmt_pairs_list)
+    return tmt_pairs_arr
 
 
 def add_columns_mod_2(col1, col2):
@@ -57,21 +90,24 @@ def add_columns_mod_2(col1, col2):
     return list(result)
 
 
-def get_inclusion_matrix(pairs_arr_S, pairs_arr_X, subset_indices):
+def get_inclusion_matrix(pairs_arr_X, pairs_arr_Z, subset_indices=[]):
     """ Given two pairs of arrays with the vertex merge pairs, this function returns the associated inclusion matrix. 
     From the point of view of minimum spanning trees, the output matrix columns can be interpreted as the minimum paths that are needed to 
-    go through in mst(X) in order to connect the endpoints from an edge in mst(S)
+    go through in MST(Z) in order to connect the endpoints from an edge in MST(X)
     """
-    pivot2column = [-1] + np.argsort(pairs_arr_X[:,1]).tolist()
+    # If subset indices are not specified, we assume that the indices of vertices from S correspond to the first #X vertices from Z
+    if (len(subset_indices)==0):
+        subset_indices = list(range(pairs_arr_X.shape[0]+1))
+    pivot2column = [-1] + np.argsort(np.max(pairs_arr_Z, axis=1)).tolist()
     inclusion_matrix = []
-    for col_S in pairs_arr_S:
-        col_S = [subset_indices[i] for i in col_S]
+    for col_X in pairs_arr_X:
+        col_X = [subset_indices[i] for i in col_X]
         col_M = []
-        while(len(col_S)>0):
-            piv = np.max(col_S)
+        while(len(col_X)>0):
+            piv = np.max(col_X)
             col_M.append(pivot2column[piv])
-            col_S = add_columns_mod_2(col_S, pairs_arr_X[pivot2column[piv]])
-        # end reducing column S
+            col_X = add_columns_mod_2(col_X, pairs_arr_Z[pivot2column[piv]])
+        # end reducing column X
         col_M.sort()
         inclusion_matrix.append(col_M)
     return inclusion_matrix
@@ -93,36 +129,36 @@ def get_inclusion_matrix_pivots(matrix_list, num_rows):
     return pivots  
 
 
-def plot_matching_0(filt_S, filt_X, matching, ax):
+def plot_matching_0(filt_X, filt_Z, matching, ax):
     """ Given two zero dimensional barcodes as well as a block function between them, this function plots the associated diagram"""
     # Plot matching barcode
-    for i, X_end in enumerate(filt_X):
+    for i, Z_end in enumerate(filt_Z):
         if i in matching:
-            S_end = filt_S[matching.index(i)]
-            ax.add_patch(mpl.patches.Rectangle([0, i-0.2], X_end, 0.4, color="navy", zorder=2))
-            ax.add_patch(mpl.patches.Rectangle([X_end*0.9, i-0.2], S_end-X_end, 0.4, color="orange", zorder=1.9))
+            X_end = filt_X[matching.index(i)]
+            ax.add_patch(mpl.patches.Rectangle([0, i-0.2], Z_end, 0.4, color="navy", zorder=2))
+            ax.add_patch(mpl.patches.Rectangle([Z_end*0.9, i-0.2], X_end-Z_end, 0.4, color="orange", zorder=1.9))
         else:
-            ax.add_patch(mpl.patches.Rectangle([0, i-0.2], X_end, 0.4, color="aquamarine", zorder=2))
+            ax.add_patch(mpl.patches.Rectangle([0, i-0.2], Z_end, 0.4, color="aquamarine", zorder=2))
 
-    MAX_PLOT_RAD = max(np.max(filt_S), np.max(filt_X))*1.1
+    MAX_PLOT_RAD = max(np.max(filt_X), np.max(filt_Z))*1.1
     ax.set_xlim([-0.1*MAX_PLOT_RAD, MAX_PLOT_RAD*1.1])
-    ax.set_ylim([-0.1*len(filt_S), len(filt_X)])
+    ax.set_ylim([-0.1*len(filt_X), len(filt_Z)])
     ax.set_frame_on(False)
     ax.set_yticks([])
 #end plot_matching_0
 
-def plot_density_matrix(filt_S, filt_X, matching, ax, nbins=5):
-    endpoints_X = np.array(filt_X)[matching]
-    differences = np.array([[a, b] for (a,b) in zip(filt_S, endpoints_X)])
+def plot_density_matrix(filt_X, filt_Z, matching, ax, nbins=5):
+    endpoints_Z = np.array(filt_Z)[matching]
+    differences = np.array([[a, b] for (a,b) in zip(filt_X, endpoints_Z)])
     ax.hist2d(differences[:,0], differences[:,1], bins=(nbins, nbins), cmap=plt.cm.jet)
     ax.set_xlabel('Ends in X')
     ax.set_ylabel('Ends in Z')
 
-def plot_density_matrix_percentage(filt_S, filt_X, matching, ax, nbins=5):
-    ends_S = np.array(filt_S)
-    max_end = np.max(ends_S)
-    ends_diff = ends_S - np.array(filt_X)[matching]
-    Diag_diff = np.vstack((ends_S, ends_diff)).transpose()
+def plot_density_matrix_percentage(filt_X, filt_Z, matching, ax, nbins=5):
+    ends_X = np.array(filt_X)
+    max_end = np.max(ends_X)
+    ends_diff = ends_X - np.array(filt_Z)[matching]
+    Diag_diff = np.vstack((ends_X, ends_diff)).transpose()
     hist = np.histogram2d(Diag_diff[:,1], Diag_diff[:,0], bins=nbins, range=[[0,max_end], [0,max_end]])[0]
     sum_cols = np.sum(hist, axis=0)
     sum_cols = np.maximum(sum_cols, 1)
@@ -130,12 +166,12 @@ def plot_density_matrix_percentage(filt_S, filt_X, matching, ax, nbins=5):
     hist=hist[-1::-1]
     ax.imshow(hist, extent=(0, max_end, 0, max_end))
     ax.set_xlabel('Differences of the bars (percent)')
-    ax.set_ylabel('Length of the bars X')
+    ax.set_ylabel('Length of the bars Z')
 
-def compute_matching_diagram(filt_S, filt_X, matching, _tol=1e-5):
+def compute_matching_diagram(filt_X, filt_Z, matching, _tol=1e-5):
     pairs = []
-    for i, a in enumerate(filt_S):
-        b = filt_X[matching[i]]
+    for i, a in enumerate(filt_X):
+        b = filt_Z[matching[i]]
         pairs.append((a, b))
     # end for 
     multiplicities = [] 
@@ -153,14 +189,14 @@ def compute_matching_diagram(filt_S, filt_X, matching, _tol=1e-5):
         # end checking if pair similar
     # end while
     # Next compute right infinity points and their multiplicities 
-    unmatched_idx = [j for j in range(len(filt_X)) if j not in matching]
+    unmatched_idx = [j for j in range(len(filt_Z)) if j not in matching]
     if len(unmatched_idx)>0:
-        b = filt_X[unmatched_idx.pop()]
-        pairs.append((np.infty, b))
+        b = filt_Z[unmatched_idx.pop()]
+        pairs.append((np.inf, b))
         multiplicities.append(1)
         while len(unmatched_idx)>0:
             prev_b = b
-            b = filt_X[unmatched_idx.pop()]
+            b = filt_Z[unmatched_idx.pop()]
             if (np.abs(b-prev_b)<_tol):
                 multiplicities[-1]+=1
             else:
@@ -220,20 +256,20 @@ def plot_density_matching_diagram(D_f_rep, coker_f, savepath, nbins=5, cmap="jet
     ### Save figure
     plt.savefig(savepath)
 
-def plot_matching_0(filt_S, filt_X, matching, ax):
+def plot_matching_0(filt_X, filt_Z, matching, ax):
     """ Given two zero dimensional barcode endpoint lists as well as a block function between them, this function plots the associated diagram"""
     # Plot matching barcode
-    for i, X_end in enumerate(filt_X):
+    for i, Z_end in enumerate(filt_Z):
         if i in matching:
-            S_end = filt_S[matching.index(i)]
-            ax.add_patch(mpl.patches.Rectangle([0, i-0.2], X_end, 0.4, color="navy", zorder=2))
-            ax.add_patch(mpl.patches.Rectangle([X_end*0.9, i-0.2], S_end-X_end, 0.4, color="orange", zorder=1.9))
+            X_end = filt_X[matching.index(i)]
+            ax.add_patch(mpl.patches.Rectangle([0, i-0.2], Z_end, 0.4, color="navy", zorder=2))
+            ax.add_patch(mpl.patches.Rectangle([Z_end*0.9, i-0.2], X_end-Z_end, 0.4, color="orange", zorder=1.9))
         else:
-            ax.add_patch(mpl.patches.Rectangle([0, i-0.2], X_end, 0.4, color="aquamarine", zorder=2))
+            ax.add_patch(mpl.patches.Rectangle([0, i-0.2], Z_end, 0.4, color="aquamarine", zorder=2))
 
-    MAX_PLOT_RAD = max(np.max(filt_S), np.max(filt_X))*1.1
+    MAX_PLOT_RAD = max(np.max(filt_X), np.max(filt_Z))*1.1
     ax.set_xlim([-0.1*MAX_PLOT_RAD, MAX_PLOT_RAD*1.1])
-    ax.set_ylim([-0.1*len(filt_X), len(filt_X)])
+    ax.set_ylim([-0.1*len(filt_Z), len(filt_Z)])
     ax.set_frame_on(False)
     ax.set_yticks([])
 #end plot_matching_0

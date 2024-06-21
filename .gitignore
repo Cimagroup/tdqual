@@ -2,6 +2,7 @@
 venv
 build
 tdqual.egg-info
+*__pycache__
 
 # Notebook files 
 *.ipynb_checkpoints
