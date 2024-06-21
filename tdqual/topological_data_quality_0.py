@@ -5,7 +5,7 @@ import matplotlib as mpl
 import scipy.spatial.distance as dist
 from scipy.sparse.csgraph import minimum_spanning_tree
 
-def compute_Mf_0(X, Z, indices_X):
+def compute_Mf_0(X, Z):
     filtration_list_X, pairs_arr_X = mst_edge_filtration(X) # MST(X)
     filtration_list_Z, pairs_arr_Z = mst_edge_filtration(Z) # MST(Z)
     TMT_X_pairs = compute_tmt_pairs(filtration_list_X, pairs_arr_X)
