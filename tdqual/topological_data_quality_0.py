@@ -5,9 +5,15 @@ import matplotlib as mpl
 import scipy.spatial.distance as dist
 from scipy.sparse.csgraph import minimum_spanning_tree
 
-def compute_Mf_0(X, Z):
-    filtration_list_X, pairs_arr_X = mst_edge_filtration(X) # MST(X)
-    filtration_list_Z, pairs_arr_Z = mst_edge_filtration(Z) # MST(Z)
+def compute_Mf_0(X, Z, is_dist=False):
+    """Compute the matching induced by the inclusion X --> Z given by sending points from X, in order, to the first points from Z.
+    We assume that coordinates of X and Z are given as numpy arrays, where the number of rows from Z is greater or equal to X.
+    If is_dist is True, we assume that X and Z are given as distance matrices.
+
+    This returns a pair of lists with endpoints of intervals, that are representations of both barcodes, together with a matching between such lists given by a list of indices.
+""" 
+    filtration_list_X, pairs_arr_X = mst_edge_filtration(X, is_dist=is_dist) # MST(X)
+    filtration_list_Z, pairs_arr_Z = mst_edge_filtration(Z, is_dist=is_dist) # MST(Z)
     TMT_X_pairs = compute_tmt_pairs(filtration_list_X, pairs_arr_X)
     TMT_Z_pairs = compute_tmt_pairs(filtration_list_Z, pairs_arr_Z)
     indices_X_Z = np.max(TMT_Z_pairs, axis=1)<X.shape[0]
@@ -38,12 +44,15 @@ def read_csr_matrix(cs_matrix):
     edges_arr = edges_arr[sort_idx]
     return filtration_list, edges_arr
 
-def mst_edge_filtration(points):
+def mst_edge_filtration(points, is_dist=False):
     """Returns the edges and filtration values for the Euclidean minimum spanning tree
-    of a given point sample. 
+    of a given point sample.
     This is a wrapper for the scipy minimum_spanning_tree function.
-    """ 
-    mst = minimum_spanning_tree(dist.squareform(dist.pdist(points)))
+    """
+    if is_dist:
+        mst = minimum_spanning_tree(points)
+    else:
+        mst = minimum_spanning_tree(dist.squareform(dist.pdist(points)))
     # We now read the compressed sparse row matrix
     return read_csr_matrix(mst)
 
@@ -177,6 +186,7 @@ def compute_matching_diagram(filt_X, filt_Z, matching, _tol=1e-5):
     multiplicities = [] 
     pairs_copy = list(pairs)
     old_pair = pairs_copy.pop()
+    pairs = [old_pair] # create new pairs list with non-repeating entries
     multiplicities.append(1)
     # First compute matched pairs and their multiplicities
     while len(pairs_copy)>0:
@@ -185,6 +195,7 @@ def compute_matching_diagram(filt_X, filt_Z, matching, _tol=1e-5):
             multiplicities[-1]+=1
         else:
             multiplicities.append(1)
+            pairs.append(pair)
             old_pair = pair
         # end checking if pair similar
     # end while
