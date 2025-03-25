@@ -229,11 +229,11 @@ def plot_matching_diagram(pairs, ax, colorpt="black", marker="o", size=15, hmax=
         max_x, lim_x, infty_x = hmax, hmax*1.3, hmax*1.1
     # end if-else loop
     ax.plot([0, lim_x], [0, lim_x], c="gray", linewidth=1, zorder=1)
-    ax.plot([infty_x, infty_x], [0, lim_x], c="blue", linewidth=1, zorder=1)
+    ax.plot([0, 0], [0, lim_x], c="blue", linewidth=1, zorder=1)
     ax.scatter(fin_pairs[:,0], fin_pairs[:,1], color=colorpt, s=size, marker=marker, zorder=2)
     inf_points = pairs[pairs[:,0]==np.inf]
-    ax.scatter(np.ones(len(inf_points))*infty_x, inf_points[:,1], color=colorpt, s=size, marker=marker, zorder=2)
-    ax.text(infty_x*1.02, infty_x*1.1, "∞", fontsize=15, color="blue")
+    ax.scatter(np.zeros(len(inf_points)), inf_points[:,1], color=colorpt, s=size, marker=marker, zorder=2)
+    ax.text(0, infty_x*1.1, "∞", fontsize=18, color="blue")
     ax.scatter([infty_x], [infty_x], color=colorpt, s=size, marker=marker, zorder=2)
     # Adjust spines 
     ax.spines[["top", "right"]].set_visible(False)
