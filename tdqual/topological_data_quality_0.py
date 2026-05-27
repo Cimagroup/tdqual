@@ -5,7 +5,7 @@ import matplotlib as mpl
 import scipy.spatial.distance as dist
 from scipy.sparse.csgraph import minimum_spanning_tree
 
-def compute_Mf_0(X, Z, is_dist=False):
+def compute_Mf_0(X, Z, is_dist=False, track_reductions=False):
     """Compute the matching induced by the inclusion X --> Z given by sending points from X, in order, to the first points from Z.
     We assume that coordinates of X and Z are given as numpy arrays, where the number of rows from Z is greater or equal to X.
     If is_dist is True, we assume that X and Z are given as distance matrices.
@@ -20,9 +20,14 @@ def compute_Mf_0(X, Z, is_dist=False):
     TMT_X_Z_pairs = TMT_Z_pairs[indices_X_Z]
     indices_X_Z = np.nonzero(indices_X_Z)[0]
     FX = get_inclusion_matrix(TMT_X_pairs, TMT_X_Z_pairs) # Associated matrix
-    matchingX = get_inclusion_matrix_pivots(FX, Z.shape[0]) # Matching in TMT_X_Z
-    matching =[indices_X_Z[i] for i in matchingX] # Matching in all TMT_Z
-    return filtration_list_X, filtration_list_Z, matching
+    if track_reductions:
+        matchingX, reductions = get_inclusion_matrix_pivots_tracking_reductions(FX, Z.shape[0]) # Matching in TMT_X_Z
+        matching =[indices_X_Z[i] for i in matchingX] # Matching in all TMT_Z
+        return filtration_list_X, filtration_list_Z, matching, reductions
+    else:
+        matchingX = get_inclusion_matrix_pivots(FX, Z.shape[0]) # Matching in TMT_X_Z
+        matching =[indices_X_Z[i] for i in matchingX] # Matching in all TMT_Z
+        return filtration_list_X, filtration_list_Z, matching
 
 def read_csr_matrix(cs_matrix):
     """Function to read output from minimum_spanning_tree and prepare it as a list of 
@@ -89,14 +94,13 @@ def compute_tmt_pairs(filtration_list, edges_arr, tolerance=10e-8):
     return tmt_pairs_arr
 
 
-def add_columns_mod_2(col1, col2):
+def add_columns_mod_2(col_a, col_b):
     """ Given two lists of integers, which are sparse representations of a pair of vectors in Z mod 2, this funciton adds them and 
     returns the result in the same input format.
     """
-    diff_1 = set(col1).difference(set(col2))
-    diff_2 = set(col2).difference(set(col1))
-    result = diff_1.union(diff_2)
-    return list(result)
+    set_a = set(col_a)
+    set_b = set(col_b)
+    return sorted(list(set_a ^ set_b))
 
 
 def get_inclusion_matrix(pairs_arr_X, pairs_arr_Z, subset_indices=[]):
@@ -121,21 +125,49 @@ def get_inclusion_matrix(pairs_arr_X, pairs_arr_Z, subset_indices=[]):
         inclusion_matrix.append(col_M)
     return inclusion_matrix
 
+def get_pivot(nonempty_list):
+    "given a non-empty list of integers, returns the pivot. GIves error otherwise."
+    return int(np.max(nonempty_list))
+
 def get_inclusion_matrix_pivots(matrix_list, num_rows):
     """ Returns the pivots of a matrix given in list format"""
     pivots = []
-    pivot2column = np.ones(num_rows, dtype="int")*-1
+    reduced_matrix = []
+    pivot2column = np.full(num_rows, -1, dtype=int)
     for i, column in enumerate(matrix_list):
         reduce_column = list(column)
-        piv = np.max(reduce_column)
+        piv = get_pivot(reduce_column)
         while(pivot2column[piv]>-1):
-            reduce_column = add_columns_mod_2(reduce_column, matrix_list[pivot2column[piv]])
-            piv = np.max(reduce_column)
+            reduce_column = add_columns_mod_2(reduce_column, reduced_matrix[pivot2column[piv]])
+            piv = get_pivot(reduce_column)
             # we assume that columns are never reduced to the 0 column
         pivots.append(piv)
+        reduced_matrix.append(reduce_column)
         pivot2column[piv] = i
     # end getting pivots
-    return pivots  
+    return pivots
+
+def get_inclusion_matrix_pivots_tracking_reductions(matrix_list, num_rows):
+    """ Returns the pivots of a matrix given in list format, as well as a list indicating the left columns that were added to each single column."""
+    pivots = []
+    reductions = []
+    reduced_matrix = []
+    pivot2column = np.full(num_rows, -1, dtype=int)
+    for i, column in enumerate(matrix_list):
+        column_additions = []
+        reduce_column = list(column)
+        piv = get_pivot(reduce_column)
+        while(pivot2column[piv]>-1):
+            reduce_column = add_columns_mod_2(reduce_column, reduced_matrix[pivot2column[piv]])
+            column_additions.append(pivot2column[piv])
+            piv = get_pivot(reduce_column)
+            # we assume that columns are never reduced to the 0 column
+        pivots.append(piv)
+        reduced_matrix.append(reduce_column)
+        reductions.append(sorted(column_additions))
+        pivot2column[piv] = i
+    # end getting pivots
+    return pivots, reductions
 
 
 def plot_matching_0(filt_X, filt_Z, matching, ax):
