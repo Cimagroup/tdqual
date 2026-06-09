@@ -61,7 +61,7 @@ def mst_edge_filtration(points, is_dist=False):
     # We now read the compressed sparse row matrix
     return read_csr_matrix(mst)
 
-def compute_tmt_pairs(filtration_list, edges_arr, tolerance=10e-8):
+def compute_tmt_pairs(filtration_list, edges_arr, subset_size=0, tolerance=10e-8):
     # Get proper merge tree pairs 
     E_b = []
     C = np.array(list(range(edges_arr.shape[0]+1)))
@@ -80,9 +80,8 @@ def compute_tmt_pairs(filtration_list, edges_arr, tolerance=10e-8):
             idx = np.argmin(E_b_C_min)
             edge = E_b[idx]
             # (ii) 
-            M, m = np.max(C[edge]), np.min(C[edge])
-            assert m < M
-            # (iii) 
+            M, m = merging_pair(C, edge, subset_size)
+            # (iii) revise
             tmt_pairs_list.append([M,m])
             # (iv)
             C[C==M]=m
@@ -93,7 +92,24 @@ def compute_tmt_pairs(filtration_list, edges_arr, tolerance=10e-8):
     tmt_pairs_arr = np.array(tmt_pairs_list)
     return tmt_pairs_arr
 
-
+def merging_pair(C, edge, subset_size):
+    """Given an array of components together with an edge, decide which is the surviving component,
+    Returns M, n which are the two components of C[edge], where M is the component that survives and m is the component that finishes.
+    If either of the elements from C[edge] is > subset_size, then the component which survives is that of maximum index. Otherwise, the component that
+    survives is that of maximum size.
+    
+    Returns M and m, where M is the index of the index of the vertex being merged to m. 
+    """
+    M = np.max(C[edge])
+    m = np.min(C[edge])
+    assert m < M
+    if M <= subset_size:
+        m_num = np.sum(C==m)
+        M_num = np.sum(C==M)
+        if m_num < M_num:
+            return m, M
+    return M, m
+        
 def add_columns_mod_2(col_a, col_b):
     """ Given two lists of integers, which are sparse representations of a pair of vectors in Z mod 2, this funciton adds them and 
     returns the result in the same input format.
@@ -114,10 +130,15 @@ def get_inclusion_matrix(pairs_arr_X, pairs_arr_Z, subset_indices=[]):
     pivot2column = [-1] + np.argsort(np.max(pairs_arr_Z, axis=1)).tolist()
     inclusion_matrix = []
     for col_X in pairs_arr_X:
+        # print("---")
+        # print(pivot2column)
         col_X = [subset_indices[i] for i in col_X]
         col_M = []
         while(len(col_X)>0):
+            # print(col_X)
             piv = np.max(col_X)
+            # print(f"piv:{piv}")
+            # print(f"{pivot2column[piv]}")
             col_M.append(pivot2column[piv])
             col_X = add_columns_mod_2(col_X, pairs_arr_Z[pivot2column[piv]])
         # end reducing column X
@@ -208,6 +229,36 @@ def plot_density_matrix_percentage(filt_X, filt_Z, matching, ax, nbins=5):
     ax.imshow(hist, extent=(0, max_end, 0, max_end))
     ax.set_xlabel('Differences of the bars (percent)')
     ax.set_ylabel('Length of the bars Z')
+
+import numpy as np
+
+
+def compute_matching_diagram_separated(filt_X, filt_Z, matching, transposed=True):
+    """Computes matching diagram, splitting finite and infinite points with multiplicities.
+        We transpose the finite pairs for convenience.
+    """
+    finite_points = []
+    infinite_points = []
+    
+    # 1. Process the matched pairs
+    for i, a in enumerate(filt_X):
+        b = filt_Z[matching[i]]
+        if transposed:
+            pair = (b,a)
+        else:
+            pair = (a, b)
+        finite_points.append(pair)
+            
+    # 2. Process the unmatched points from filt_Z (right infinity points)
+    # Using a set for O(1) lookups makes this much faster than a list scan
+    matched_set = set(matching)
+    for j, b in enumerate(filt_Z):
+        if j not in matched_set:
+            # We set the unmatched start at 0 for convenience
+            pair = (0, b)
+            infinite_points.append(pair)
+                
+    return np.array(finite_points), np.array(infinite_points)
 
 def compute_matching_diagram(filt_X, filt_Z, matching, _tol=1e-5):
     pairs = []
