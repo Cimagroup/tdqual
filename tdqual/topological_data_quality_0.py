@@ -233,7 +233,7 @@ def plot_density_matrix_percentage(filt_X, filt_Z, matching, ax, nbins=5):
 import numpy as np
 
 
-def compute_matching_diagram_separated(filt_X, filt_Z, matching, transposed=True):
+def compute_matching_diagram_separated(filt_X, filt_Z, matching):
     """Computes matching diagram, splitting finite and infinite points with multiplicities.
         We transpose the finite pairs for convenience.
     """
@@ -243,11 +243,7 @@ def compute_matching_diagram_separated(filt_X, filt_Z, matching, transposed=True
     # 1. Process the matched pairs
     for i, a in enumerate(filt_X):
         b = filt_Z[matching[i]]
-        if transposed:
-            pair = (b,a)
-        else:
-            pair = (a, b)
-        finite_points.append(pair)
+        finite_points.append((a, b))
             
     # 2. Process the unmatched points from filt_Z (right infinity points)
     # Using a set for O(1) lookups makes this much faster than a list scan
