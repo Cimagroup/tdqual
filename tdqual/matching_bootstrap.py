@@ -18,6 +18,19 @@ def bootstrap_subsamples(X, Z, size_subsample_X, size_subsample_compl, nb_times=
     # range over all subsamples
     return sub
 
+def bootstrap_subsamples_pairs(X, Z, size_subsamples, nb_times=80):
+    sub = []
+    # construct a list of nb_times x nb_points
+    for sub_idx in range(nb_times):
+        X_idx = np.random.choice(range(X.shape[0]), size_subsamples)
+        X_sub = X[X_idx]
+        Z_idx = np.random.choice(range(Z.shape[0]), size_subsamples)
+        Z_sub = Z[Z_idx]
+        # Append subsample 
+        sub.append((X_sub, Z_sub))
+    # range over all subsamples
+    return sub
+
 
 ######################################
 # L1 norm

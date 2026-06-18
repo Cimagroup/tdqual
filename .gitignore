@@ -6,6 +6,7 @@ tdqual.egg-info
 
 # Notebook files 
 *.ipynb_checkpoints
+*notebooks-jose-manuel
 
 # Generated Plots
 plots
