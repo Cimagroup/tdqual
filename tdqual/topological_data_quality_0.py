@@ -110,18 +110,42 @@ def merging_pair(C, edge, subset_size):
             return m, M
     return M, m
         
-def add_columns_mod_2(col_a, col_b):
-    """ Given two lists of integers, which are sparse representations of a pair of vectors in Z mod 2, this funciton adds them and 
+def add_columns_mod_2(col1, col2):
+    """ Given two lists of integers, which are sparse representations of a pair of vectors in Z mod 2, this funciton adds them and
     returns the result in the same input format.
     """
-    set_a = set(col_a)
-    set_b = set(col_b)
-    return sorted(list(set_a ^ set_b))
+    return list(set(col1) ^ set(col2)) #La operación ^ entre sets da los elementos que están en cada conjunto pero no en ambos
 
+# def get_inclusion_matrix(pairs_arr_X, pairs_arr_Z, subset_indices=[]):
+#     """ Given two pairs of arrays with the vertex merge pairs, this function returns the associated inclusion matrix. 
+#     From the point of view of minimum spanning trees, the output matrix columns can be interpreted as the minimum paths that are needed to 
+#     go through in MST(Z) in order to connect the endpoints from an edge in MST(X)
+#     """
+#     # If subset indices are not specified, we assume that the indices of vertices from S correspond to the first #X vertices from Z
+#     if (len(subset_indices)==0):
+#         subset_indices = list(range(pairs_arr_X.shape[0]+1))
+#     pivot2column = [-1] + np.argsort(np.max(pairs_arr_Z, axis=1)).tolist()
+#     inclusion_matrix = []
+#     for col_X in pairs_arr_X:
+#         # print("---")
+#         # print(pivot2column)
+#         col_X = [subset_indices[i] for i in col_X]
+#         col_M = []
+#         while(len(col_X)>0):
+#             # print(col_X)
+#             piv = np.max(col_X)
+#             # print(f"piv:{piv}")
+#             # print(f"{pivot2column[piv]}")
+#             col_M.append(pivot2column[piv])
+#             col_X = add_columns_mod_2(col_X, pairs_arr_Z[pivot2column[piv]])
+#         # end reducing column X
+#         col_M.sort()
+#         inclusion_matrix.append(col_M)
+#     return inclusion_matrix
 
 def get_inclusion_matrix(pairs_arr_X, pairs_arr_Z, subset_indices=[]):
-    """ Given two pairs of arrays with the vertex merge pairs, this function returns the associated inclusion matrix. 
-    From the point of view of minimum spanning trees, the output matrix columns can be interpreted as the minimum paths that are needed to 
+    """ Given two pairs of arrays with the vertex merge pairs, this function returns the associated inclusion matrix.
+    From the point of view of minimum spanning trees, the output matrix columns can be interpreted as the minimum paths that are needed to
     go through in MST(Z) in order to connect the endpoints from an edge in MST(X)
     """
     # If subset indices are not specified, we assume that the indices of vertices from S correspond to the first #X vertices from Z
@@ -130,15 +154,10 @@ def get_inclusion_matrix(pairs_arr_X, pairs_arr_Z, subset_indices=[]):
     pivot2column = [-1] + np.argsort(np.max(pairs_arr_Z, axis=1)).tolist()
     inclusion_matrix = []
     for col_X in pairs_arr_X:
-        # print("---")
-        # print(pivot2column)
         col_X = [subset_indices[i] for i in col_X]
         col_M = []
         while(len(col_X)>0):
-            # print(col_X)
             piv = np.max(col_X)
-            # print(f"piv:{piv}")
-            # print(f"{pivot2column[piv]}")
             col_M.append(pivot2column[piv])
             col_X = add_columns_mod_2(col_X, pairs_arr_Z[pivot2column[piv]])
         # end reducing column X
@@ -147,7 +166,7 @@ def get_inclusion_matrix(pairs_arr_X, pairs_arr_Z, subset_indices=[]):
     return inclusion_matrix
 
 def get_pivot(nonempty_list):
-    "given a non-empty list of integers, returns the pivot. GIves error otherwise."
+    "given a non-empty list of integers, returns the pivot. Gives error otherwise."
     return int(np.max(nonempty_list))
 
 def get_inclusion_matrix_pivots(matrix_list, num_rows):
